@@ -1,6 +1,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include "mpi.h"
 
 int getLineChars(int c)
 {
@@ -24,18 +25,28 @@ void readLine(FILE *fp, int C, int *out)
 int main(int argc, char **argv)
 {
     FILE *fp;
+    int rank, numWorkers;
+    MPI_Init(&argc, &argv);
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &numWorkers);
+
     int C, V;
     fp = fopen("input.txt", "r");
 
     fscanf(fp, "%d\n", &C);
     fscanf(fp, "%d\n", &V);
-    int *line = (int *)malloc(C * sizeof(int));
 
-    // get 4rd line
-    fseek(fp, getLineChars(C) * 3, SEEK_CUR);
-    readLine(fp, C, line);
-    for (int i = 0; i < C; i++)
-        printf("%d ", line[i]);
+    int my_start = rank * V / numWorkers;
+    int my_end = rank == numWorkers - 1 ? V : my_start + V / numWorkers;
+
+    fseek(fp, getLineChars(C) * my_start, SEEK_CUR);
+    int *line = (int *)malloc(C * sizeof(int));
+    for (; my_start < my_end; my_start++)
+    {
+        readLine(fp, C, line);
+        printf("I'm gay nr: %d, I vote for C: %d\n", rank, line[0]);
+    }
     fclose(fp);
+    MPI_Finalize();
     return 0;
 }
