@@ -5,7 +5,7 @@
 
 void write_to_file(int* recvbuf, int cands, int voters){
     FILE* fp = fopen("input_file.txt", "w");
-    fprintf(fp, "%d ", cands); //no of candidates
+    fprintf(fp, "%d\n", cands); //no of candidates
     fprintf(fp, "%d\n", voters); //no of voters
 
     //Writes numbers to File
