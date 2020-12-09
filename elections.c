@@ -36,17 +36,23 @@ int main(int argc, char **argv)
     fscanf(fp, "%d\n", &C);
     fscanf(fp, "%d\n", &V);
 
-    int my_start = rank * V / numWorkers;
-    int my_end = rank == numWorkers - 1 ? V : my_start + V / numWorkers;
+    int my_start = rank * (V / numWorkers);
+    int my_end = rank == numWorkers - 1 ? V : my_start + (V / numWorkers);
+    int *my_votes = (int *)malloc(C * sizeof(int));
+    for (int i = 0; i < C; i++)
+        my_votes[i] = 0;
 
     fseek(fp, getLineChars(C) * my_start, SEEK_CUR);
     int *line = (int *)malloc(C * sizeof(int));
     for (; my_start < my_end; my_start++)
     {
         readLine(fp, C, line);
-        printf("I'm gay nr: %d, I vote for C: %d\n", rank, line[0]);
+        my_votes[line[0] - 1] += 1;
     }
+
     fclose(fp);
+    free(my_votes);
+    free(line);
     MPI_Finalize();
     return 0;
 }
