@@ -97,7 +97,11 @@ int main(int argc, char *argv[]){
     {
         write_to_file(recvbuf,cands,voters);
     }
-
+    free(sendbuf);
+    free(votes);
+    free(recvbuf);
+    free(recvcnts);
+    free(dpsl);
     MPI_Finalize();
     return 0;
 } 
