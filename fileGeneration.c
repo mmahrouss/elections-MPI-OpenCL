@@ -61,7 +61,7 @@ int main(int argc, char *argv[]){
     /* Intializes random number generator with different seeds depending on the rank */
     srand(time(0)+rank);
     int* sendbuf =(int*) malloc ( chunk*cands * sizeof(int) );
-    int votes[cands];
+    int* votes = (int*) malloc ( cands * sizeof(int) );
     for(int i=0;i<cands;i++){
         votes[i]=i+1;
     }
@@ -70,7 +70,7 @@ int main(int argc, char *argv[]){
     for (int i = 0; i <  chunk; i++){
         shuffle(votes,cands);
         for (int j = 0; j < cands; j++){
-        // Random number from 1 to 5
+        // Random number from 1 to cands
          sendbuf[i*cands + j] = votes[j];
         }
     }
