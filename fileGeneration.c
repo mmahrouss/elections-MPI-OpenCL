@@ -61,7 +61,7 @@ int main(int argc, char *argv[])
     {
         chunk = (voters / numOfProcesses);
     }
-    /* Intializes random number generator with different seeds depending on the rank */
+    /* Initializes random number generator with different seeds depending on the rank */
     srand(time(0) + rank);
     int *sendbuf = (int *)malloc(chunk * cands * sizeof(int));
     int *votes = (int *)malloc(cands * sizeof(int));

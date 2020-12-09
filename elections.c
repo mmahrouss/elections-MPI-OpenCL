@@ -5,6 +5,8 @@
 
 int getLineChars(int c)
 {
+    // Calculated the number of digits and whitespace in the sequence
+    /*1 2 3 .... V\n*/
     int power = 10;
     int result = c * 2;
     while (c >= power)
@@ -16,6 +18,7 @@ int getLineChars(int c)
 }
 void readLine(FILE *fp, int C, int *out)
 {
+    // Reads one voter's votes line
     for (int i = 0; i < C - 1; i++)
     {
         fscanf(fp, "%d ", &out[i]);
@@ -31,25 +34,26 @@ int main(int argc, char **argv)
     MPI_Comm_size(MPI_COMM_WORLD, &numWorkers);
 
     int C, V;
-    fp = fopen("input.txt", "r");
+    fp = fopen("input.txt", "r"); // File to read from, should be accessible to all processes
 
-    fscanf(fp, "%d\n", &C);
-    fscanf(fp, "%d\n", &V);
+    fscanf(fp, "%d\n", &C); // Read number of Candidates
+    fscanf(fp, "%d\n", &V); // Read number of Voters
 
-    int my_start = rank * (V / numWorkers);
-    int my_end = rank == numWorkers - 1 ? V : my_start + (V / numWorkers);
-    int *my_votes = (int *)malloc(C * sizeof(int));
+    int my_start = rank * (V / numWorkers);                                // Vote to start from based on rank
+    int my_end = rank == numWorkers - 1 ? V : my_start + (V / numWorkers); // end
+    int *my_votes = (int *)malloc(C * sizeof(int));                        // Array to hold votes sum
     for (int i = 0; i < C; i++)
-        my_votes[i] = 0;
+        my_votes[i] = 0; // Init array to 0
 
-    fseek(fp, getLineChars(C) * my_start, SEEK_CUR);
-    int *line = (int *)malloc(C * sizeof(int));
+    fseek(fp, getLineChars(C) * my_start, SEEK_CUR); //Seek file to allign with my_start
+    int *line = (int *)malloc(C * sizeof(int));      // Array to hold one vote line
     for (; my_start < my_end; my_start++)
     {
-        readLine(fp, C, line);
-        my_votes[line[0] - 1] += 1;
+        readLine(fp, C, line);      // Read one vote
+        my_votes[line[0] - 1] += 1; // Register first vote for first round
     }
 
+    // Cleanup, close file, free memory and finalize MPI
     fclose(fp);
     free(my_votes);
     free(line);
