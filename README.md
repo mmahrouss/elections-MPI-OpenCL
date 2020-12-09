@@ -1,6 +1,12 @@
 # elections-MPI
 Distributed election program using MPI
 
+# Team:
+* Mohamed Kasem 201601144
+* Mohamed Mahrous 201601078
+* Alaa Roshdy 201600031
+* Mohamed Mostafa 201600236
+
 ## Task 1 input generation
 * Generate file in parallel
 * I/P C (number of candidates), V voters
