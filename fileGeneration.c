@@ -14,6 +14,7 @@ void write_to_file(int *recvbuf, int cands, int voters)
     {
         for (int j = 0; j < cands; j++)
             fprintf(fp, "%d ", *(recvbuf + i * cands + j));
+        fseek(fp, -1, SEEK_CUR);
         fprintf(fp, "\n");
     }
     fclose(fp);
