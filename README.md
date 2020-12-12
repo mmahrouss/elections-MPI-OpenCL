@@ -21,18 +21,18 @@ Distributed election program using MPI
 * Recieve counts for all processes except the last was `(voters/numOfProcesses)` while the last process was that in addition to the remainder from voters/numOfProcesses, all multiplied by the number of candidates since each line countains not only 1 value, but number of candidates.
 * The results are then serially written into a file.
 ## Task 2 result calculation
-<!-- * Vote weight score = `C - i` -->
-* Step 1. I/O
-    * Read the file in parallel
-    * read the first 2 lines
-    * decide which lines to read from file
-    * For each process:
-        * calculate score for top candidate only
-        * `Array[C]` 
-        * Use `reduce` to get total score at root
-    * At root check if first round settles it
-    * If not
-        * `broadcast` top 2 candidates for 2nd round
-        * `Array[2]` result
-        * `reduce` again
-    * `stdout` result
+1. Read the file in parallel
+    * All filed read the first two lines to know C and V
+    * Every line is the same length , V whitespaces, and sum of digits from 1 ... C. Which is calculated using `getLineChars` 
+    * Use rank to seek the file to  the section to read. 
+    * Each  process processes `V/P` where P is the number of processes
+    * When V is not divisible by P, the last process does the rest.
+    * Every line is read using `readLine` function that reads the integers into an array
+2. First round
+    * The first vote from each line is used.
+    * Then after all the votes for a process is done, the result is reduced to have the total votes at process 0
+    * The votes are converted to percentages and printed to `stdout`
+    * If any candidate gets more than 50% then we have a winner
+    * Otherwise we move on to Round 2
+    * In either of these scenarios, we broadcast the winner variable to all processes, to inform other processes if a winner was decided.
+3. Second round

@@ -30,10 +30,10 @@ void getTop2(int *votes, int C, int *top2)
 }
 int getLineChars(int c)
 {
-    // Calculated the number of digits and whitespace in the sequence
+    // Calculates the number of digits and whitespace in the sequence
     /*1 2 3 .... V\n*/
     int power = 10;
-    int result = c * 2;
+    int result = c * 2; // single digits and whitespaces
     while (c >= power)
     {
         result += (c - power + 1);
