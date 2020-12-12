@@ -8,19 +8,18 @@ Distributed election program using MPI
 * Mohamed Mostafa 201600236
 
 ## Task 1 input generation
-* Generate file in parallel
-* I/P C (number of candidates), V voters
-* Distribute the number of lines (V)
-* for each node
-    * seed:
-        * staging:
-            * rank
-        * production:
-            * time + rank
-    * Generate `Array[V/P x C]`
-    * Handle last process where the V is not multiple P
-* `Gatherv` at root node
-* Write file
+* First, at rank zero, the user is prompted to enter the number of candidates and voters.
+* These values are then broadcasted to all other processes. 
+* Then, all processes except the last take equal portions of the voters' size calculated as `voters/numOfProcesses`.
+* The last process, however, takes `voters/numOfProcesses` in addition to any remainder in case the number of `voters` is not divisible by `numOfProcesses`.
+* All processes create an array called `votes`, which has the values from 1 to number of candidates.
+* For every voter in the chunck, `votes` array is shuffled and then assigned to `sendbuf` which is a dynamic array of size chunk * number of candidates.
+* `shuffle` function shuffles the order of values. This ensures that a single voter would never have repeated candidate numbers in his/her votes.
+* To ensure that shuffle creates different values for each process, and different values everytime a user runs the program, we used `srand(time(0)+rank))`
+* Then, to gather the results of all processes,`Gatherv` was used at root node.
+* Since each process should be displaced for a size of chunk * number of candidates, displacement was calculated as `i*(voters/numOfProcesses)*cands` where i is the rank of the process.
+* Recieve counts for all processes except the last was `(voters/numOfProcesses)` while the last process was that in addition to the remainder from voters/numOfProcesses, all multiplied by the number of candidates since each line countains not only 1 value, but number of candidates.
+* The results are then serially written into a file.
 ## Task 2 result calculation
 <!-- * Vote weight score = `C - i` -->
 * Step 1. I/O
