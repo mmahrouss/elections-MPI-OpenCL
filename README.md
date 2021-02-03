@@ -2,10 +2,8 @@
 Distributed election program using MPI
 
 # Team:
-* Mohamed Kasem 201601144
 * Mohamed Mahrous 201601078
 * Alaa Roshdy 201600031
-* Mohamed Mostafa 201600236
 
 ## Task 1 input generation
 * First, at rank zero, the user is prompted to enter the number of candidates and voters.

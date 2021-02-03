@@ -35,14 +35,14 @@ reduce(int C,                   // number of candidates
   }
 }
 
-__kernel void
-getVotes(int C,                    // number of candidates
-         __global int *firstVotes, // Array of length N (number of voters +
-                                   // padding to work group size)
-         __local int *localVotes,  // Array of length C x n, n is number of work
-                                   // itemsper workgroup
-         __global int
-             *sumVotesOut // Array of length C x N, N is number of work groups
+__kernel void getVotes(
+    int C,                             // number of candidates
+    __global int *restrict firstVotes, // Array of length N (number of voters +
+                                       // padding to work group size)
+    __local int *localVotes, // Array of length C x n, n is number of work
+                             // itemsper workgroup
+    __global int *restrict
+        sumVotesOut // Array of length C x N, N is number of work groups
 ) {
   int num_wrk_items = get_local_size(0); // n
   int local_id = get_local_id(0);
@@ -68,11 +68,11 @@ getVotes(int C,                    // number of candidates
 __kernel void iterativeReducer(
     int C,     // number of candidates
     int nPrev, // previoud number of groups
-    __global int *sumVotesIn,
-    __local int *localVotes, // Array of length C x n, n is number of work items
-                             // per work group
-    __global int
-        *sumVotesOut // Array of length C x N, N is number of work groups
+    __global int *restrict sumVotesIn,
+    __local int *restrict localVotes, // Array of length C x n, n is number of
+                                      // work items per work group
+    __global int *restrict
+        sumVotesOut // Array of length C x N, N is number of work groups
 ) {
   int local_id = get_local_id(0);
   int global_id = get_global_id(0);
@@ -83,28 +83,32 @@ __kernel void iterativeReducer(
   reduce(C, localVotes, sumVotesOut);
 }
 __kernel void getRoundtwoVotes(
-    int C,                   // number of candidates
-    __global int *allVotes,  // (V+paddin)*C = N * C
-    __local int *localVotes, // Array of length N (number of voters*num of cands
-                             // + padding to work group size)
-    __global int *top2,      // array of 2 elements (top2)
-    __global int *
+    int C,                           // number of candidates
+    __global int *restrict allVotes, // (V+paddin)*C = N * C
+    __local int *restrict
+        localVotes, // Array of length N (number of voters*num of cands
+                    // + padding to work group size)
+    __global int *restrict top2, // array of 2 elements (top2)
+    __global int *restrict
         sumRoundTwoVotesOut // Array of length C x N, N is number of work groups
 ) {
   int local_id = get_local_id(0);
+  int global_id = get_global_id(0);
 
+  localVotes[local_id * 2] = 0;
+  localVotes[local_id * 2 + 1] = 0;
   // Get local vote
   for (uint candidate = 0; candidate < C; candidate += 1) {
-    int vote = allVotes[local_id * C + candidate];
+    int vote = allVotes[global_id * C + candidate];
     if (vote == -1) {
       break;
     }
     if (vote == top2[0]) {
-      localVotes[local_id * 2] += 1;
+      localVotes[local_id * 2] = 1;
       break;
     }
     if (vote == top2[1]) {
-      localVotes[local_id * 2 + 1] += 1;
+      localVotes[local_id * 2 + 1] = 1;
       break;
     }
   }
