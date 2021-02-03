@@ -58,25 +58,30 @@ int main(int argc, char **argv)
 
 {
     /* Initalize OpenCL vars start */
-    cl_platform_id cpPlatform;                        // OpenCL platform
-    cl_device_id device_id;                           // device ID
-    cl_context context;                               // context
-    cl_command_queue queue;                           // command queue
-    cl_program program;                               // program
-    cl_kernel getVotesKernel, iterativeReducerKernel; // kernel
-    cl_int err;                                       // Errors
-    char *source;                                     // Source code
-    size_t source_size;                               // Source code size
-    char fileName[] = "kernels.cl";                   // Kernel source path
+    cl_platform_id cpPlatform;                                                // OpenCL platform
+    cl_device_id device_id;                                                   // device ID
+    cl_context context;                                                       // context
+    cl_command_queue queue;                                                   // command queue
+    cl_program program;                                                       // program
+    cl_kernel getVotesKernel, iterativeReducerKernel, getRoundtwoVotesKernel; // kernel
+    cl_int err;                                                               // Errors
+    char *source;                                                             // Source code
+    size_t source_size;                                                       // Source code size
+    char fileName[] = "kernels.cl";                                           // Kernel source path
 
     // Host arrays
     int *firstVotes;
     int *sumVotesOut;
     int *sumVotesIn;
+    int *allVotes;
+    int *sumRoundTwoVotesOut;
     // Device input buffers
     cl_mem d_firstVotes;
     cl_mem d_sumVotesOut;
     cl_mem d_sumVotesIn;
+    cl_mem d_sumRoundTwoVotesOut;
+    cl_mem d_top2;
+    cl_mem d_allVotes;
 
     /* Initalize OpenCL vars end */
     /* File Read start */
@@ -99,6 +104,7 @@ int main(int argc, char **argv)
     firstVotes = (int *)malloc(globalSize * sizeof(int));   // Array to hold total votes
     sumVotesOut = (int *)malloc(nGroups * C * sizeof(int)); // Array to hold total votes
     sumVotesIn = (int *)malloc(nGroups * C * sizeof(int));  // Array to hold sum of votes votes
+
     for (int i = 0; i < V; i++)
     {
         readLine(fp, C, line);   // Read one vote
@@ -296,19 +302,101 @@ int main(int argc, char **argv)
         int top2[2];
         getTop2(sumVotesOut, C, top2);
         fsetpos(fp, &init_pos);
+
+        nGroups = ceil(V / (float)LOCALSIZE);
+        globalSize = nGroups * LOCALSIZE;
+
+        sumRoundTwoVotesOut = (int *)malloc(nGroups * 2 * sizeof(int)); //Array to hold sum of votes for the top 2 cands
+        allVotes = (int *)malloc(C * globalSize * sizeof(int));
+
+        d_sumRoundTwoVotesOut = clCreateBuffer(context, CL_MEM_READ_WRITE, nGroups * 2 * sizeof(int), NULL, NULL);
+        d_allVotes = clCreateBuffer(context, CL_MEM_READ_ONLY, globalSize * C * sizeof(int), NULL, NULL);
+        d_top2 = clCreateBuffer(context, CL_MEM_READ_ONLY, 2 * sizeof(int), NULL, NULL);
+
+        err = clEnqueueWriteBuffer(queue, d_top2, CL_TRUE, 0, 2 * sizeof(int), top2, 0, NULL, NULL);
+        if (err != CL_SUCCESS)
+        {
+            printf("Failed to enque write buffer. 3.0 \n");
+            exit(1);
+        }
+
+        for (int i = 0; i < V; i++)
+        {
+            readLine(fp, C, line); // Read one vote
+            for (int j = 0; j < C; j++)
+            {
+                allVotes[i * C + j] = line[j];
+            }
+        }
+        for (int i = V * C; i < globalSize * C; i++)
+        {
+            allVotes[i] = -1; // padding
+        }
+
+        err = clEnqueueWriteBuffer(queue, d_allVotes, CL_TRUE, 0, C * globalSize * sizeof(int), allVotes, 0, NULL, NULL);
+        err = clEnqueueWriteBuffer(queue, d_sumRoundTwoVotesOut, CL_TRUE, 0, nGroups * 2 * sizeof(int), sumRoundTwoVotesOut, 0, NULL, NULL);
+        if (err != CL_SUCCESS)
+        {
+            printf("Failed to enque write buffer. 3.0 \n");
+            exit(1);
+        }
+        getRoundtwoVotesKernel = clCreateKernel(program, "getRoundtwoVotes", &err);
+
+        err = clSetKernelArg(getRoundtwoVotesKernel, 0, sizeof(int), (void *)&C);
+        err |= clSetKernelArg(getRoundtwoVotesKernel, 1, sizeof(cl_mem), (void *)&allVotes);
+        err |= clSetKernelArg(getRoundtwoVotesKernel, 2, sizeof(int) * globalSize * 2, NULL);
+        err |= clSetKernelArg(getRoundtwoVotesKernel, 3, sizeof(cl_mem), (void *)&d_top2);
+        err |= clSetKernelArg(getRoundtwoVotesKernel, 4, sizeof(cl_mem), (void *)&d_sumRoundTwoVotesOut);
+
+        err = clEnqueueNDRangeKernel(
+            queue,
+            getRoundtwoVotesKernel,
+            1, NULL,
+            &globalSize,
+            &localSize,
+            0, NULL, NULL);
+        if (err != CL_SUCCESS)
+        {
+            printf("Failed to enqueue NDrange. 3.0\n");
+            exit(1);
+        }
+
+        err = clEnqueueReadBuffer(queue, d_sumRoundTwoVotesOut, CL_TRUE, 0, nGroups * 2 * sizeof(int), sumRoundTwoVotesOut, 0, NULL, NULL);
+        if (err != CL_SUCCESS)
+        {
+            printf("Failed to enqueue read buffer. 3.0 \n");
+            exit(1);
+        }
+        printf("Round 2 results\n============================\n");
+        int arg_winner = (sumRoundTwoVotesOut[0] > sumRoundTwoVotesOut[1]) ? 0 : 1;
+        printf("Candidate [%d] got %d/%d which is %0.2lf%%\n", top2[0] + 1, sumRoundTwoVotesOut[0], V, (sumRoundTwoVotesOut[0] / (double)V) * 100);
+        printf("Candidate [%d] got %d/%d which is %0.2lf%%\n", top2[1] + 1, sumRoundTwoVotesOut[1], V, (sumRoundTwoVotesOut[1] / (double)V) * 100);
+        winner = top2[arg_winner] + 1;
+        printf("%d 2\n", winner);
     }
 
     /* free host resources */
     free(line);
     free(firstVotes);
     free(source);
+    free(sumRoundTwoVotesOut);
+    free(sumVotesIn);
+    free(sumVotesOut);
+    free(allVotes);
 
     /* free OpenCL resources */
     clReleaseMemObject(d_sumVotesOut);
+    clReleaseMemObject(d_sumVotesIn);
     clReleaseMemObject(d_firstVotes);
+    clReleaseMemObject(d_allVotes);
+    clReleaseMemObject(d_sumRoundTwoVotesOut);
+    clReleaseMemObject(d_top2);
+
     clReleaseCommandQueue(queue);
     clReleaseKernel(getVotesKernel);
     clReleaseKernel(iterativeReducerKernel);
+    clReleaseKernel(getRoundtwoVotesKernel);
+
     clReleaseProgram(program);
     clReleaseContext(context);
     printf("smooth\n");
