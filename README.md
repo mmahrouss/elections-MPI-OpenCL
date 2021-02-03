@@ -36,3 +36,7 @@ Distributed election program using MPI
     * Otherwise we move on to Round 2
     * In either of these scenarios, we broadcast the winner variable to all processes, to inform other processes if a winner was decided.
 3. Second round
+    * The first vote from each line is used if it is one of the 2 winning candidates from round 1, otherwise discard and read next from the same line.
+    * Then after all the votes for a process is done, the result is reduced to have the total votes at process 0
+    * The votes are converted to percentages and printed to `stdout`
+    * Get the candidate with score >= 50% and print it as winner.
