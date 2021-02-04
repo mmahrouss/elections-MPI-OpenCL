@@ -356,10 +356,15 @@ int main(int argc, char **argv)
 
         err = clSetKernelArg(getRoundtwoVotesKernel, 0, sizeof(int), (void *)&C);
         err |= clSetKernelArg(getRoundtwoVotesKernel, 1, sizeof(cl_mem), (void *)&d_allVotes);
-        err |= clSetKernelArg(getRoundtwoVotesKernel, 2, sizeof(int) * globalSize * 2, NULL);
+        err |= clSetKernelArg(getRoundtwoVotesKernel, 2, sizeof(int) * LOCALSIZE * 2, NULL);
         err |= clSetKernelArg(getRoundtwoVotesKernel, 3, sizeof(cl_mem), (void *)&d_top2);
         err |= clSetKernelArg(getRoundtwoVotesKernel, 4, sizeof(cl_mem), (void *)&d_sumRoundTwoVotesOut);
-
+        if (err != CL_SUCCESS)
+        {
+            printf("Failed to set kernel args getRoundtwoVotesKernel\n");
+            printf("Error %d\n", err);
+            exit(1);
+        }
         err = clEnqueueNDRangeKernel(
             queue,
             getRoundtwoVotesKernel,
@@ -405,7 +410,7 @@ int main(int argc, char **argv)
             // printf("%ld %ld \n", nGroups, globalSize);
             int r2C = 2;
             err = clSetKernelArg(iterativeReducerKernel, 0, sizeof(int), (void *)&r2C);
-            err = clSetKernelArg(iterativeReducerKernel, 1, sizeof(int), (void *)&nPrev);
+            err |= clSetKernelArg(iterativeReducerKernel, 1, sizeof(int), (void *)&nPrev);
             err |= clSetKernelArg(iterativeReducerKernel, 2, sizeof(cl_mem), (void *)&d_sumRoundTwoVotesIn);
             err |= clSetKernelArg(iterativeReducerKernel, 3, sizeof(int) * 2 * LOCALSIZE, NULL);
             err |= clSetKernelArg(iterativeReducerKernel, 4, sizeof(cl_mem), (void *)&d_sumRoundTwoVotesOut);
