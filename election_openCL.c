@@ -32,19 +32,6 @@ void getTop2(int *votes, int C, int *top2)
         }
     }
 }
-int getLineChars(int c)
-{
-    // Calculates the number of digits and whitespace in the sequence
-    /*1 2 3 .... V\n*/
-    int power = 10;
-    int result = c * 2; // single digits and whitespaces
-    while (c >= power)
-    {
-        result += (c - power + 1);
-        power *= 10;
-    }
-    return result;
-}
 void readLine(FILE *fp, int C, int *out)
 {
     // Reads one voter's votes line
@@ -53,6 +40,15 @@ void readLine(FILE *fp, int C, int *out)
         fscanf(fp, "%d ", &out[i]);
     }
     fscanf(fp, "%d\n", &out[C - 1]);
+}
+
+void checkError(char *message, cl_int err)
+{
+    if (err != CL_SUCCESS)
+    {
+        printf("%s", message);
+        exit(1);
+    }
 }
 int main(int argc, char **argv)
 
@@ -135,56 +131,32 @@ int main(int argc, char **argv)
     fclose(kernelFile);
 
     // Bind to platform
-    err = clGetPlatformIDs(1, &cpPlatform, NULL);
-    if (err != CL_SUCCESS)
-    {
-        printf("Failed to get platform ID.\n");
-        exit(1);
-    }
+    checkError("Failed to get platform ID.\n", clGetPlatformIDs(1, &cpPlatform, NULL));
+
     // Get ID for the device
-    err = clGetDeviceIDs(cpPlatform, CL_DEVICE_TYPE_GPU, 1, &device_id, NULL);
-    if (err != CL_SUCCESS)
-    {
-        printf("Failed to get device id.\n");
-        exit(1);
-    }
+    checkError("Failed to get device id.\n", clGetDeviceIDs(cpPlatform, CL_DEVICE_TYPE_GPU, 1, &device_id, NULL));
+
     // Create a context
     context = clCreateContext(0, 1, &device_id, NULL, NULL, &err);
-    if (err != CL_SUCCESS)
-    {
-        printf("Failed to create context.\n");
-        exit(1);
-    }
+    checkError("Failed to create context.\n", err);
+
     // Create a command queue
     queue = clCreateCommandQueue(context, device_id, 0, &err);
 
-    if (err != CL_SUCCESS)
-    {
-        printf("Failed to create command queue.\n");
-        exit(1);
-    }
+    checkError("Failed to create command queue.\n", err);
+
     // Create the compute program from the source buffer
     program = clCreateProgramWithSource(context, 1,
                                         (const char **)&source, NULL, &err);
-    if (err != CL_SUCCESS)
-    {
-        printf("Failed to create program from source.\n");
-        exit(1);
-    }
+    checkError("Failed to create program from source.\n", err);
+
     /* Build Kernel Program */
-    err = clBuildProgram(program, 1, &device_id, NULL, NULL, NULL);
-    if (err != CL_SUCCESS)
-    {
-        printf("Failed to build program.\n");
-        exit(1);
-    }
+    checkError("Failed to build program.\n", clBuildProgram(program, 1, &device_id, NULL, NULL, NULL));
+
     /* Create OpenCL Kernel */
     getVotesKernel = clCreateKernel(program, "getVotes", &err);
-    if (err != CL_SUCCESS)
-    {
-        printf("Failed to create kernel.\n");
-        exit(1);
-    }
+    checkError("Failed to create kernel.\n", err);
+
     /* Create a buffer for EVERYONE */
     d_firstVotes = clCreateBuffer(context, CL_MEM_READ_ONLY, globalSize * sizeof(int), NULL, NULL);
     d_sumVotesOut = clCreateBuffer(context, CL_MEM_READ_WRITE, nGroups * C * sizeof(int), NULL, NULL);
@@ -194,40 +166,30 @@ int main(int argc, char **argv)
     d_allVotes = clCreateBuffer(context, CL_MEM_READ_ONLY, globalSize * C * sizeof(int), NULL, NULL);
     d_top2 = clCreateBuffer(context, CL_MEM_READ_ONLY, 2 * sizeof(int), NULL, NULL);
 
-    err = clEnqueueWriteBuffer(queue, d_firstVotes, CL_TRUE, 0, globalSize * sizeof(int), firstVotes, 0, NULL, NULL);
-    if (err != CL_SUCCESS)
-    {
-        printf("Failed to write buffer.\n");
-        exit(1);
-    }
+    checkError("Failed to write buffer.\n",
+               clEnqueueWriteBuffer(queue, d_firstVotes, CL_TRUE, 0,
+                                    globalSize * sizeof(int), firstVotes, 0, NULL, NULL));
+
     err = clSetKernelArg(getVotesKernel, 0, sizeof(int), (void *)&C);
     err |= clSetKernelArg(getVotesKernel, 1, sizeof(cl_mem), (void *)&d_firstVotes);
     err |= clSetKernelArg(getVotesKernel, 2, sizeof(int) * C * LOCALSIZE, NULL);
     err |= clSetKernelArg(getVotesKernel, 3, sizeof(cl_mem), (void *)&d_sumVotesOut);
-    if (err != CL_SUCCESS)
-    {
-        printf("Failed to create kernel arg.\n");
-        exit(1);
-    }
+    checkError("Failed to create kernel arg.\n", err);
+
     size_t localSize = LOCALSIZE;
-    err = clEnqueueNDRangeKernel(
-        queue,
-        getVotesKernel,
-        1, NULL,
-        &globalSize,
-        &localSize,
-        0, NULL, NULL);
-    if (err != CL_SUCCESS)
-    {
-        printf("Failed to enqueue NDrange.\n");
-        exit(1);
-    }
-    err = clEnqueueReadBuffer(queue, d_sumVotesOut, CL_TRUE, 0, nGroups * C * sizeof(int), sumVotesOut, 0, NULL, NULL);
-    if (err != CL_SUCCESS)
-    {
-        printf("Failed to enqueue read buffer.\n");
-        exit(1);
-    }
+    checkError("Failed to enqueue NDrange.\n",
+               clEnqueueNDRangeKernel(
+                   queue,
+                   getVotesKernel,
+                   1, NULL,
+                   &globalSize,
+                   &localSize,
+                   0, NULL, NULL));
+
+    checkError("Failed to enqueue read buffer.\n",
+               clEnqueueReadBuffer(queue, d_sumVotesOut, CL_TRUE, 0,
+                                   nGroups * C * sizeof(int), sumVotesOut, 0, NULL, NULL));
+
     iterativeReducerKernel = clCreateKernel(program, "iterativeReducer", &err);
     getRoundtwoVotesKernel = clCreateKernel(program, "getRoundtwoVotes", &err);
     clFinish(queue);
@@ -236,22 +198,11 @@ int main(int argc, char **argv)
     int nPrev;
     while (nGroups > 1)
     {
-        // printf("============================\n");
-        // for (int i = 0; i < C * nGroups; i++)
-        // {
-        //     if (!(i % C))
-        //         printf("\n");
-        //     printf("%d ", sumVotesOut[i]);
-        // }
-        // printf("\n");
         nPrev = nGroups;
         memcpy(sumVotesIn, sumVotesOut, nGroups * C * sizeof(int));
-        err = clEnqueueWriteBuffer(queue, d_sumVotesIn, CL_TRUE, 0, nGroups * C * sizeof(int), sumVotesIn, 0, NULL, NULL);
-        if (err != CL_SUCCESS)
-        {
-            printf("Failed to write buffer.\n");
-            exit(1);
-        }
+        checkError("Failed to write buffer.\n",
+                   clEnqueueWriteBuffer(queue, d_sumVotesIn,
+                                        CL_TRUE, 0, nGroups * C * sizeof(int), sumVotesIn, 0, NULL, NULL));
 
         nGroups = ceil(nGroups / (float)LOCALSIZE);
         globalSize = nGroups * LOCALSIZE;
@@ -262,11 +213,7 @@ int main(int argc, char **argv)
         err |= clSetKernelArg(iterativeReducerKernel, 2, sizeof(cl_mem), (void *)&d_sumVotesIn);
         err |= clSetKernelArg(iterativeReducerKernel, 3, sizeof(int) * C * LOCALSIZE, NULL);
         err |= clSetKernelArg(iterativeReducerKernel, 4, sizeof(cl_mem), (void *)&d_sumVotesOut);
-        if (err != CL_SUCCESS)
-        {
-            printf("Failed to create kernel arg. 2.0 \n");
-            exit(1);
-        }
+        checkError("Failed to create kernel arg. 2.0 \n", err);
 
         err = clEnqueueNDRangeKernel(
             queue,
@@ -275,17 +222,11 @@ int main(int argc, char **argv)
             &globalSize,
             &localSize,
             0, NULL, NULL);
-        if (err != CL_SUCCESS)
-        {
-            printf("Failed to enqueue NDrange.\n");
-            exit(1);
-        }
-        err = clEnqueueReadBuffer(queue, d_sumVotesOut, CL_TRUE, 0, nGroups * C * sizeof(int), sumVotesOut, 0, NULL, NULL);
-        if (err != CL_SUCCESS)
-        {
-            printf("Failed to enqueue read buffer. 2.0 \n");
-            exit(1);
-        }
+        checkError("Failed to enqueue NDrange.\n", err);
+
+        checkError("Failed to enqueue read buffer. 2.0 \n",
+                   clEnqueueReadBuffer(queue, d_sumVotesOut,
+                                       CL_TRUE, 0, nGroups * C * sizeof(int), sumVotesOut, 0, NULL, NULL));
     }
 
     clFinish(queue);
@@ -327,12 +268,8 @@ int main(int argc, char **argv)
         nGroups = ceil(V / (float)LOCALSIZE);
         globalSize = nGroups * LOCALSIZE;
 
-        err = clEnqueueWriteBuffer(queue, d_top2, CL_TRUE, 0, 2 * sizeof(int), top2, 0, NULL, NULL);
-        if (err != CL_SUCCESS)
-        {
-            printf("Failed to enque write buffer. 3.0 \n");
-            exit(1);
-        }
+        checkError("Failed to enque write buffer. 3.0 \n",
+                   clEnqueueWriteBuffer(queue, d_top2, CL_TRUE, 0, 2 * sizeof(int), top2, 0, NULL, NULL));
 
         for (int i = 0; i < V; i++)
         {
@@ -347,62 +284,39 @@ int main(int argc, char **argv)
             allVotes[i] = -1; // padding
         }
 
-        err = clEnqueueWriteBuffer(queue, d_allVotes, CL_TRUE, 0, C * globalSize * sizeof(int), allVotes, 0, NULL, NULL);
-        if (err != CL_SUCCESS)
-        {
-            printf("Failed to enque write buffer. 3.0 \n");
-            exit(1);
-        }
+        checkError("Failed to enque write buffer. 3.0 \n",
+                   clEnqueueWriteBuffer(queue, d_allVotes, CL_TRUE, 0,
+                                        C * globalSize * sizeof(int), allVotes, 0, NULL, NULL));
 
         err = clSetKernelArg(getRoundtwoVotesKernel, 0, sizeof(int), (void *)&C);
         err |= clSetKernelArg(getRoundtwoVotesKernel, 1, sizeof(cl_mem), (void *)&d_allVotes);
         err |= clSetKernelArg(getRoundtwoVotesKernel, 2, sizeof(int) * LOCALSIZE * 2, NULL);
         err |= clSetKernelArg(getRoundtwoVotesKernel, 3, sizeof(cl_mem), (void *)&d_top2);
         err |= clSetKernelArg(getRoundtwoVotesKernel, 4, sizeof(cl_mem), (void *)&d_sumRoundTwoVotesOut);
-        if (err != CL_SUCCESS)
-        {
-            printf("Failed to set kernel args getRoundtwoVotesKernel\n");
-            printf("Error %d\n", err);
-            exit(1);
-        }
-        err = clEnqueueNDRangeKernel(
-            queue,
-            getRoundtwoVotesKernel,
-            1, NULL,
-            &globalSize,
-            &localSize,
-            0, NULL, NULL);
-        if (err != CL_SUCCESS)
-        {
-            printf("Failed to enqueue NDrange. 3.0\n");
-            printf("Error %d\n", err);
-            exit(1);
-        }
 
-        err = clEnqueueReadBuffer(queue, d_sumRoundTwoVotesOut, CL_TRUE, 0, nGroups * 2 * sizeof(int), sumRoundTwoVotesOut, 0, NULL, NULL);
-        if (err != CL_SUCCESS)
-        {
-            printf("Failed to enqueue read buffer. 3.0 \n");
-            exit(1);
-        }
+        checkError("Failed to set kernel args getRoundtwoVotesKernel\n", err);
+
+        checkError("Failed to enqueue NDrange. 3.0\n",
+                   clEnqueueNDRangeKernel(
+                       queue,
+                       getRoundtwoVotesKernel,
+                       1, NULL,
+                       &globalSize,
+                       &localSize,
+                       0, NULL, NULL));
+
+        checkError("Failed to enqueue read buffer. 3.0 \n",
+                   clEnqueueReadBuffer(queue, d_sumRoundTwoVotesOut, CL_TRUE, 0,
+                                       nGroups * 2 * sizeof(int), sumRoundTwoVotesOut, 0, NULL, NULL));
+
         while (nGroups > 1)
         {
-            // printf("============================");
-            // for (int i = 0; i < 2 * nGroups; i++)
-            // {
-            //     if (!(i % 2))
-            //         printf("\n");
-            //     printf("%d ", sumRoundTwoVotesOut[i]);
-            // }
-            // printf("\n");
+
             nPrev = nGroups;
             memcpy(sumRoundTwoVotesIn, sumRoundTwoVotesOut, nGroups * 2 * sizeof(int));
-            err = clEnqueueWriteBuffer(queue, d_sumRoundTwoVotesIn, CL_TRUE, 0, nGroups * 2 * sizeof(int), sumRoundTwoVotesIn, 0, NULL, NULL);
-            if (err != CL_SUCCESS)
-            {
-                printf("Failed to write buffer.\n");
-                exit(1);
-            }
+            checkError("Failed to write buffer.\n",
+                       clEnqueueWriteBuffer(queue, d_sumRoundTwoVotesIn,
+                                            CL_TRUE, 0, nGroups * 2 * sizeof(int), sumRoundTwoVotesIn, 0, NULL, NULL));
 
             nGroups = ceil(nGroups / (float)LOCALSIZE);
             globalSize = nGroups * LOCALSIZE;
@@ -414,30 +328,21 @@ int main(int argc, char **argv)
             err |= clSetKernelArg(iterativeReducerKernel, 2, sizeof(cl_mem), (void *)&d_sumRoundTwoVotesIn);
             err |= clSetKernelArg(iterativeReducerKernel, 3, sizeof(int) * 2 * LOCALSIZE, NULL);
             err |= clSetKernelArg(iterativeReducerKernel, 4, sizeof(cl_mem), (void *)&d_sumRoundTwoVotesOut);
-            if (err != CL_SUCCESS)
-            {
-                printf("Failed to create kernel arg. 2.0 \n");
-                exit(1);
-            }
+            checkError("Failed to create kernel arg. 2.0 \n", err);
 
-            err = clEnqueueNDRangeKernel(
-                queue,
-                iterativeReducerKernel,
-                1, NULL,
-                &globalSize,
-                &localSize,
-                0, NULL, NULL);
-            if (err != CL_SUCCESS)
-            {
-                printf("Failed to enqueue NDrange.\n");
-                exit(1);
-            }
-            err = clEnqueueReadBuffer(queue, d_sumRoundTwoVotesOut, CL_TRUE, 0, nGroups * 2 * sizeof(int), sumRoundTwoVotesOut, 0, NULL, NULL);
-            if (err != CL_SUCCESS)
-            {
-                printf("Failed to enqueue read buffer. 2.0 \n");
-                exit(1);
-            }
+            checkError("Failed to enqueue NDrange.\n",
+                       clEnqueueNDRangeKernel(
+                           queue,
+                           iterativeReducerKernel,
+                           1, NULL,
+                           &globalSize,
+                           &localSize,
+                           0, NULL, NULL));
+
+            checkError("Failed to enqueue read buffer. 2.0 \n",
+                       clEnqueueReadBuffer(queue, d_sumRoundTwoVotesOut, CL_TRUE, 0, nGroups * 2 * sizeof(int),
+                                           sumRoundTwoVotesOut, 0, NULL, NULL));
+
             clFinish(queue);
         }
         printf("Round 2 results\n============================\n");
