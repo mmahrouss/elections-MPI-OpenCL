@@ -66,12 +66,18 @@ int main(int argc, char **argv)
     char fileName[] = "kernels.cl";                                           // Kernel source path
 
     // Host arrays
-    int *firstVotes;
-    int *sumVotesOut;
-    int *sumVotesIn;
-    int *allVotes;
-    int *sumRoundTwoVotesOut;
-    int *sumRoundTwoVotesIn;
+    int *firstVotes;          // Array of the first vote from all voters
+    int *sumVotesOut;         // Sum of all votes output
+    int *sumVotesIn;          // Sum of all votes input that is used to write to buffer
+    int *allVotes;            // Matrix of all the votes
+    int *sumRoundTwoVotesOut; //Sum of all votes output for round two
+    int *sumRoundTwoVotesIn;  //Sum of all votes input for round two
+    double *percentVotes;     // Holds Votes in percentage
+    int *line;                // Array to hold one vote line
+    int nPrev;                // Number of previous groups
+    size_t localSize = LOCALSIZE;
+    int winner = 0;
+
     // Device input buffers
     cl_mem d_firstVotes;
     cl_mem d_sumVotesOut;
@@ -98,13 +104,14 @@ int main(int argc, char **argv)
     nGroups = ceil(V / (float)LOCALSIZE);
     globalSize = nGroups * LOCALSIZE;
 
-    int *line = (int *)malloc(C * sizeof(int));                     // Array to hold one vote line
+    line = (int *)malloc(C * sizeof(int));                          // Array to hold one vote line
     firstVotes = (int *)malloc(globalSize * sizeof(int));           // Array to hold total votes
     sumVotesOut = (int *)malloc(nGroups * C * sizeof(int));         // Array to hold total votes
     sumVotesIn = (int *)malloc(nGroups * C * sizeof(int));          // Array to hold sum of votes votes
     sumRoundTwoVotesOut = (int *)malloc(nGroups * 2 * sizeof(int)); //Array to hold sum of votes for the top 2 cands
     sumRoundTwoVotesIn = (int *)malloc(nGroups * 2 * sizeof(int));
     allVotes = (int *)malloc(C * globalSize * sizeof(int));
+    percentVotes = (double *)malloc(C * sizeof(double)); // Array to hold total votes
 
     for (int i = 0; i < V; i++)
     {
@@ -176,7 +183,6 @@ int main(int argc, char **argv)
     err |= clSetKernelArg(getVotesKernel, 3, sizeof(cl_mem), (void *)&d_sumVotesOut);
     checkError("Failed to create kernel arg.\n", err);
 
-    size_t localSize = LOCALSIZE;
     checkError("Failed to enqueue NDrange.\n",
                clEnqueueNDRangeKernel(
                    queue,
@@ -195,7 +201,6 @@ int main(int argc, char **argv)
     clFinish(queue);
     free(firstVotes);
 
-    int nPrev;
     while (nGroups > 1)
     {
         nPrev = nGroups;
@@ -207,7 +212,6 @@ int main(int argc, char **argv)
         nGroups = ceil(nGroups / (float)LOCALSIZE);
         globalSize = nGroups * LOCALSIZE;
 
-        // printf("%ld %ld \n", nGroups, globalSize);
         err = clSetKernelArg(iterativeReducerKernel, 0, sizeof(int), (void *)&C);
         err = clSetKernelArg(iterativeReducerKernel, 1, sizeof(int), (void *)&nPrev);
         err |= clSetKernelArg(iterativeReducerKernel, 2, sizeof(cl_mem), (void *)&d_sumVotesIn);
@@ -230,25 +234,19 @@ int main(int argc, char **argv)
     }
 
     clFinish(queue);
-    // for (int i = 0; i < C; i++)
-    // {
-    //     printf("%d ", sumVotesOut[i]);
-    // }
-    // printf("\n");
-    double *percent_votes = (double *)malloc(C * sizeof(double)); // Array to hold total votes
-    int winner = 0;
+
     printf("Round 1 results\n============================\n");
     for (int i = 0; i < C; i++)
     {
-        percent_votes[i] = sumVotesOut[i] / (double)V;
-        printf("Candidate [%d] got %d/%d which is %0.2lf%%\n", i + 1, sumVotesOut[i], V, percent_votes[i] * 100);
-        if (percent_votes[i] > 0.5)
+        percentVotes[i] = sumVotesOut[i] / (double)V;
+        printf("Candidate [%d] got %d/%d which is %0.2lf%%\n", i + 1, sumVotesOut[i], V, percentVotes[i] * 100);
+        if (percentVotes[i] > 0.5)
         {
             winner = i + 1;
         }
     }
     free(sumVotesIn);
-    free(percent_votes);
+    free(percentVotes);
     clReleaseMemObject(d_sumVotesOut);
     clReleaseMemObject(d_sumVotesIn);
     clReleaseMemObject(d_firstVotes);
@@ -262,8 +260,6 @@ int main(int argc, char **argv)
         int top2[2];
         getTop2(sumVotesOut, C, top2);
         fsetpos(fp, &init_pos);
-
-        // printf("Top 2 candidates = %d and %d", top2[0], top2[1]);
 
         nGroups = ceil(V / (float)LOCALSIZE);
         globalSize = nGroups * LOCALSIZE;
@@ -321,7 +317,6 @@ int main(int argc, char **argv)
             nGroups = ceil(nGroups / (float)LOCALSIZE);
             globalSize = nGroups * LOCALSIZE;
 
-            // printf("%ld %ld \n", nGroups, globalSize);
             int r2C = 2;
             err = clSetKernelArg(iterativeReducerKernel, 0, sizeof(int), (void *)&r2C);
             err |= clSetKernelArg(iterativeReducerKernel, 1, sizeof(int), (void *)&nPrev);
@@ -374,6 +369,5 @@ int main(int argc, char **argv)
 
     clReleaseProgram(program);
     clReleaseContext(context);
-    // printf("smooth\n");
     return 0;
 }
